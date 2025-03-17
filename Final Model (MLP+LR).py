@@ -31,24 +31,13 @@ from sklearn.utils import resample
 from sklearn.model_selection import learning_curve
 
 
-
 class PredictionModel:
     def __init__(self):
         self.df = pd.read_csv("./Pima Indians diabetes.csv")
         # Rename the column 'Outcome' to 'Diabetes'
         self.df.rename(columns={'Outcome': 'Diabetes'}, inplace=True)
         self.df.rename(columns={'DiabetesPedigreeFunction': 'DPF'}, inplace=True)
-        # Remove the target column for outlier analysis
-        self.X_outlier = self.df.drop(columns=['Diabetes'])
-        # Calculate IQR for each feature
-        self.Q1 = self.X_outlier.quantile(0.25)
-        self.Q3 = self.X_outlier.quantile(0.75)
-        self.IQR = self.Q3 - self.Q1
-        # Identify outliers using the IQR method
-        self.outliers = ((self.X_outlier < (self.Q1 - 1.5 * self.IQR)) | (self.X_outlier > (self.Q3 + 1.5 * self.IQR)))
-        # Remove outliers
-        self.df_clean = self.remove_outliers()
-        self.df_1 = self.df_clean.copy()
+        self.df_1 = self.df.copy()
         # Assuming 'Diabetes' is the target variable and the rest are predictors
         self.X_1 = self.df_1.drop(columns=['Diabetes'])  # Independent variables
         self.y_1 = self.df_1['Diabetes']  # Target variable
@@ -58,24 +47,24 @@ class PredictionModel:
         self.pca = PCA(n_components=8)
         self.pca_features = self.pca.fit_transform(self.X_1_scaled)
         # Fit PCA Features 
-        self.X_train_PCA, self.X_temp_PCA, self.y_train_PCA, self.y_temp_PCA = train_test_split(self.pca_features, self.y_1, test_size=0.4, random_state=42,stratify=self.y_1)
+        self.X_train_PCA, self.X_temp_PCA, self.y_train_PCA, self.y_temp_PCA = train_test_split(self.pca_features, self.y_1, test_size=0.3, random_state=42,stratify=self.y_1)
         self.X_val_PCA, self.X_test_PCA, self.y_val_PCA, self.y_test_PCA = train_test_split(self.X_temp_PCA, self.y_temp_PCA, test_size=0.5, random_state=42,stratify=self.y_temp_PCA)
         self.X_train_PCA = self.scaler.fit_transform(self.X_train_PCA)
         self.X_test_PCA = self.scaler.transform(self.X_test_PCA)
         self.X_val_PCA = self.scaler.transform(self.X_val_PCA)
         #Apply SMOTE Techqiue
-        self.smote = SMOTE(random_state=42,sampling_strategy=0.8)
+        self.smote = SMOTE(random_state=42)
         self.X_train_smote_1, self.y_train_smote_1 = self.smote.fit_resample(self.X_train_PCA, self.y_train_PCA)
         # Intialise MLP Model
-        self.mlp_final = MLPClassifier(alpha=0.001, batch_size=8, early_stopping=True,
-        hidden_layer_sizes=(8,16), learning_rate_init=0.01,
-        max_iter=500, random_state=100,activation='relu',
-        validation_fraction=0.1,tol=0.0001,solver='adam',learning_rate='constant')
+        self.mlp_final = MLPClassifier(alpha=0.001, batch_size=64, early_stopping=True,
+        hidden_layer_sizes=(5,), learning_rate_init=0.01,
+        max_iter=500, random_state=200,activation='relu',
+        validation_fraction=0.2,tol=0.0001,solver='adam')
         self.mlp_final_model = self.mlp_final.fit(self.X_train_smote_1, self.y_train_smote_1)
         # Use the predicted probabilities from the MLP model on the resampled training data
         self.mlp_final_output = self.mlp_final_model.predict_proba(self.X_train_smote_1)
         # Intialise LR Model
-        self.lr_model_final = LogisticRegression(penalty='l2', C=0.001,solver='sag', max_iter=100, random_state=42,fit_intercept=True,class_weight='balanced')
+        self.lr_model_final = LogisticRegression(penalty='l2', C=0.002,solver='liblinear', max_iter=100, random_state=42,fit_intercept=True,class_weight='balanced')
         self.lr_model_final.fit(self.mlp_final_output, self.y_train_smote_1)
         # Create a Voting Classifier to combine MLP+LR
         self.voting_mlp_lr_model_final = VotingClassifier(estimators=[('mlp', self.mlp_final_model), ('lr', self.lr_model_final)], voting='soft')
@@ -91,23 +80,13 @@ class PredictionModel:
         with open('voting_classifier_mlp_lr_final.pkl', 'rb') as f:
             loaded_model = pickle.load(f)
         
-        # Risk Threshold = 0.46
+        # Risk Threshold = 0.47
         self.fpr, self.tpr, self.thresholds = roc_curve(self.y_test_PCA, self.y_test_prob_mlp_lr_final)
         self.roc_auc = auc(self.fpr, self.tpr)        
         self.gmeans = np.sqrt(self.tpr * (1 - self.fpr))
         self.ix = np.argmax(self.gmeans)
         self.best_threshold = self.thresholds[self.ix]
 
-    def remove_outliers(self):
-        # For each feature, calculate the IQR and remove outliers
-        for column in self.df.select_dtypes(include=[np.number]).columns:
-            self.Q1 = self.df[column].quantile(0.25)
-            self.Q3 = self.df[column].quantile(0.75)
-            self.IQR = self.Q3 - self.Q1
-            lower_bound = self.Q1 - 1.5 * self.IQR
-            upper_bound = self.Q3 + 1.5 * self.IQR
-            self.df = self.df[(self.df[column] >= lower_bound) & (self.df[column] <= upper_bound)]
-        return self.df
 
     # Define a function for Model Evaluation
     def test_eval(self,clf_model, X_test, y_test, algo='Model', sampling=None,
@@ -211,8 +190,6 @@ if st.button("Predict Risk"):
     )
     st.write(f"Diabetes Risk Prediction: {result['Category']}")
     st.write(f"Probability: {result['Probability(%)']}%")
-
-
 
 
 
