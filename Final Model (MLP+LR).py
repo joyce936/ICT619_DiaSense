@@ -26,7 +26,6 @@ from imblearn.over_sampling import SMOTE
 from collections import Counter
 from sklearn.preprocessing import MinMaxScaler
 import time
-import psutil
 import os
 import pickle
 import torch
