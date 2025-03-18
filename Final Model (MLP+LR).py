@@ -64,7 +64,7 @@ class PredictionModel:
         # Use the predicted probabilities from the MLP model on the resampled training data
         self.mlp_final_output = self.mlp_final_model.predict_proba(self.X_train_smote_1)
         # Intialise LR Model
-        self.lr_model_final = LogisticRegression(penalty='l2', C=0.002,solver='liblinear', max_iter=100, random_state=42,fit_intercept=True,class_weight='balanced')
+        self.lr_model_final = LogisticRegression(penalty='l2', C=0.001,solver='liblinear', max_iter=100, random_state=42,fit_intercept=True,class_weight='balanced')
         self.lr_model_final.fit(self.mlp_final_output, self.y_train_smote_1)
         # Create a Voting Classifier to combine MLP+LR
         self.voting_mlp_lr_model_final = VotingClassifier(estimators=[('mlp', self.mlp_final_model), ('lr', self.lr_model_final)], voting='soft')
